@@ -41,7 +41,6 @@ public class DatabaseManager {
                 } else if (arg instanceof String) {
                     statement.setString(i + 1, (String) arg);
                 }
-
             }
 
             if (statement.execute()) {

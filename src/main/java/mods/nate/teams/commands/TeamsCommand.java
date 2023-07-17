@@ -1,16 +1,14 @@
 package mods.nate.teams.commands;
 
 import mods.nate.teams.teams.TeamsManager;
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static mods.nate.teams.utils.ChatUtils.chatPrefix;
@@ -24,7 +22,7 @@ public class TeamsCommand implements TabExecutor {
         }
 
         if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
-            displayHelp(sender);
+            displayHelp(player);
             return true;
         }
 
@@ -34,61 +32,119 @@ public class TeamsCommand implements TabExecutor {
         switch (subCommand) {
             case "create" -> {
                 if (args.length == 1) {
-                    sendMessage(sender, chatPrefix() + "&eMissing team name. Usage: &a/team create <name>");
+                    // Missing team name
+                    sendMessage(player, chatPrefix() + "&eMissing team name. Usage: &a/team create <name>");
                     break;
                 }
 
                 if (TeamsManager.hasTeam(playerUUID)) {
-                    sendMessage(sender, chatPrefix() + "&eYou already have a team!");
+                    // Player already has a team
+                    sendMessage(player, chatPrefix() + "&eYou already have a team!");
                     break;
                 }
 
+                // Get the team name from the arguments
                 String teamName = args[1];
+
                 TeamsManager.createTeam(teamName, playerUUID);
-                sendMessage(sender, chatPrefix() + "&eYour new team is now called " + "&a" + teamName);
             }
 
             case "disband" -> {
-                String teamName = TeamsManager.getTeamName(playerUUID);
+                // Get the current team name
+                String teamName = TeamsManager.getTeamNameFromPlayer(playerUUID);
+
                 if (!TeamsManager.hasTeam(playerUUID)) {
-                    sendMessage(sender, chatPrefix() + "&eYou don't have a team to disband");
+                    // Player doesn't have a team to disband
+                    sendMessage(player, chatPrefix() + "&eYou don't have a team to disband");
                     break;
                 }
 
                 if (!TeamsManager.isTeamLeader(playerUUID)) {
-                    sendMessage(sender, chatPrefix() + "&eYou are not the leader of " + teamName);
+                    // Player is not the leader of the team
+                    sendMessage(player, chatPrefix() + "&eYou are not the leader of " + teamName);
                     break;
                 }
 
                 TeamsManager.disbandTeam(playerUUID);
-                sendMessage(sender, chatPrefix() + "&eYou disbanded your team " + "&a" + teamName);
+                sendMessage(player, chatPrefix() + "&eYou disbanded your team " + "&a" + teamName);
             }
 
             case "rename" -> {
                 if (args.length == 1) {
-                    sendMessage(sender, chatPrefix() + "&aUsage: /teams rename <new name>");
+                    // Missing team name in arguments
+                    sendMessage(player, chatPrefix() + "&eMissing new team name. Usage: &a/teams rename <new name>");
                     break;
                 }
 
                 if (!TeamsManager.hasTeam(playerUUID)) {
-                    sendMessage(sender, chatPrefix() + "&eYou don't have a team to rename");
+                    // Player doesn't have a team to rename
+                    sendMessage(player, chatPrefix() + "&eYou don't have a team to rename");
                     break;
                 }
 
                 if (!TeamsManager.isTeamLeader(playerUUID)) {
-                    sendMessage(sender, chatPrefix() + "&eOnly the team leader can rename the team");
+                    // Player is not the leader of the team
+                    sendMessage(player, chatPrefix() + "&eOnly the team leader can rename the team");
                     break;
                 }
 
+                // Get the team name from the arguments
                 String newName = args[1];
+
                 TeamsManager.renameTeam(newName);
-                sendMessage(sender, chatPrefix() + "You've renamed your team to " + newName);
+                sendMessage(player, chatPrefix() + "You've renamed your team to " + newName);
             }
 
             case "invite" -> {
-                if (args.length > 1) {
-
+                if (args.length == 1) {
+                    // Missing player to invite
+                    sendMessage(player, chatPrefix() + "&eUsage: &a/teams invite <player>");
+                    break;
                 }
+
+                // Getting the player name from the command
+                String invitedPlayerName = args[1];
+
+                // Get the Player object from the command
+                Player invitedPlayer = Bukkit.getPlayer(invitedPlayerName);
+
+                // Get the UUID of the inviting player
+                UUID invitingPlayerUUID = player.getUniqueId();
+
+                // Get the team name of the inviting player
+                String teamName = TeamsManager.getTeamNameFromPlayer(invitingPlayerUUID);
+
+                if (invitedPlayer == null) {
+                    // Player to invite is not online or doesn't exist
+                    sendMessage(player, chatPrefix() + "&ePlayer is not online or does not exist");
+                    break;
+                }
+
+                // Get the UUID of the player being invited
+                UUID invitedPlayerUUID = invitedPlayer.getUniqueId();
+
+                if (!TeamsManager.hasTeam(invitingPlayerUUID)) {
+                    // Inviting player has no team
+                    sendMessage(player, "Inviting player has no team");
+                    break;
+                }
+
+                if (TeamsManager.hasTeam(invitedPlayerUUID)) {
+                    // Invited player is already a member of another team
+                    sendMessage(player,  chatPrefix() + "&a" + invitedPlayerName + " &eis already a member of another team");
+                    break;
+                }
+
+                if (TeamsManager.hasValidInvite(invitedPlayerUUID)) {
+                    // Player has already been invited to join a team
+                    sendMessage(player, "Youve already invited this player");
+                    break;
+                }
+
+                TeamsManager.invitePlayer(invitedPlayerUUID);
+
+                sendMessage(player, chatPrefix() + "&eYou have invited &a" + invitedPlayerName + " &eto &a" + teamName);
+                sendMessage(invitedPlayer, chatPrefix() + "&eYou have been invited to join &a" + teamName);
             }
 
             case "revokeinvite" -> {
@@ -98,16 +154,46 @@ public class TeamsCommand implements TabExecutor {
             }
 
             case "join" -> {
-                if (args.length > 1) {
-                    TeamsManager.hasInvite();
-                    TeamsManager.joinTeam();
-                } else {
-
+                if (args.length == 1) {
+                    // Missing team name
+                    sendMessage(player, chatPrefix() + "&eUsage: &a/teams join <team name>");
+                    break;
                 }
+
+                String teamName = args[1];
+                UUID joiningPlayerUUID = player.getUniqueId();
+
+                if (TeamsManager.hasTeam(joiningPlayerUUID)) {
+                    // If player is already in a team
+                    sendMessage(player, chatPrefix() + "&eYou are already apart of a team");
+                    break;
+                }
+
+                if (!TeamsManager.hasValidInvite(joiningPlayerUUID)) {
+                    // Joining player doesn't have a valid invite
+                    sendMessage(player, chatPrefix() + "&eYou have not been invited to &a" + teamName);
+                    break;
+                }
+
+                TeamsManager.joinTeam(joiningPlayerUUID, teamName);
+                sendMessage(player, chatPrefix() + "&eYou have joined team &a" + teamName);
             }
 
             case "leave" -> {
-                TeamsManager.leaveTeam();
+                if (args.length == 1) {
+                    sendMessage(player, chatPrefix() + "&eMissing new team name. Usage: &a/teams leave <team name>");
+                    break;
+                }
+
+                String playerInput = args[1];
+
+                if (!TeamsManager.teamExists(playerInput)) {
+                    sendMessage(player, chatPrefix() + "&eTeam &a" + playerInput +  " &edoes not exist.");
+                    break;
+                }
+
+                TeamsManager.leaveTeam(playerUUID);
+                sendMessage(player, chatPrefix() + "&eYou have left team &a" + playerInput);
             }
 
             case "kick" -> {
@@ -136,6 +222,41 @@ public class TeamsCommand implements TabExecutor {
 
                 }
             }
+
+            case "debug" -> {
+                String teamName = args[1];
+                int teamId = TeamsManager.getTeamID(teamName);
+                sendMessage(player, String.valueOf(teamId));
+            }
+
+            case "list" -> {
+                int page = 1;
+                int teamsPerPage = 9;
+
+                if (args.length >= 2) {
+                    try {
+                        page = Integer.parseInt(args[1]);
+                    } catch (NumberFormatException e) {
+                        sendMessage(player,"&cInvalid page number");
+                        break;
+                    }
+                }
+
+                Map<String, Object> result = TeamsManager.listTeams(page, teamsPerPage);
+
+                if (!(boolean) result.get("isValidPage")) {
+                    sendMessage(player, "&cInvalid page number");
+                    break;
+                }
+
+                int totalPages = (int) result.get("totalPages");
+                @SuppressWarnings("unchecked") // This will always return a List<String> so it doesn't matter
+                List<String> teamsOnPage = (List<String>) result.get("teams");
+
+                sendMessage(player, "&7=== Showing all &ateams &7- Page &a" + page + "/" + totalPages + "&7 ===\s");
+
+                teamsOnPage.forEach(team -> sendMessage(player, team));
+            }
         }
         return true;
     }
@@ -152,7 +273,8 @@ public class TeamsCommand implements TabExecutor {
                 "leave",
                 "kick",
                 "promote",
-                "demote"
+                "demote",
+                "list,"
         );
 
         if (args.length == 1) {
@@ -176,7 +298,8 @@ public class TeamsCommand implements TabExecutor {
                         &a/teams disband &7- Disband your team
                         &a/teams invite &e<player> &7- Invite a player to your team
                         &a/teams revokeinvite &e<player> &7- Invite a player to your team
-                        &a/teams kick &e<player> &7- Kick a player from your team
+                        &a/teams join &e<team name> &7- Join a team
+                        &a/teams leave &e<team name> &7- Leave a team
                         &a/teams kick &e<player> &7- Kick a player from your team
                         &a/teams promote &e<player> &7- Promote a player within your team
                         &a/teams demote &e<player> &7- Demote a player within your team
