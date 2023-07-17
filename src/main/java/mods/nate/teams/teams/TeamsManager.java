@@ -225,37 +225,55 @@ public class TeamsManager {
     }
 
     public static Map<String, Object> listTeams(int page, int teamsPerPage) {
+        // Calculate the start index (offset) for the SQL query
         int startIndex = (page - 1) * teamsPerPage;
 
-        ResultSet countRS = DatabaseManager.queryDB("SELECT COUNT(*) FROM Teams");
-        int totalTeams;
+        // Get total teams from the database
+        int totalTeams = getTotalTeams();
 
-        try {
-            if (!countRS.next()) {
-                return createEmptyResult(false);
-            }
-            totalTeams = countRS.getInt(1);
-        } catch (SQLException e) {
-            e.printStackTrace();
+        // If there was an error retrieving the total teams, return an empty result with an error flag
+        if (totalTeams == -1) {
             return createEmptyResult(false);
         }
 
+        // Calculate the total number of pages based on the teams and teams per page
         int totalPages = (int) Math.ceil((double) totalTeams / teamsPerPage);
 
+        // Check if page number is valid
         if (page < 1 || page > totalPages) {
             return createEmptyResult(false);
         }
 
-        ResultSet rs = DatabaseManager.queryDB("SELECT Name, Leader FROM Teams LIMIT " + teamsPerPage + " OFFSET " + startIndex);
+        // Retrieve the teams for the specified page
+        return getTeamsOnPage(startIndex, teamsPerPage, totalPages);
+    }
+
+    private static int getTotalTeams() {
+        // Execute a query to count the total number of teams in the database
+        ResultSet countRS = DatabaseManager.queryDB("SELECT COUNT(*) FROM Teams");
+
+        try {
+            if (countRS.next()) {
+                // Return the count value from the result set
+                return countRS.getInt(1);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        // Return -1 indicating an error in retrieving the total teams count
+        return -1;
+    }
+
+    private static Map<String, Object> getTeamsOnPage(int startIndex, int teamsPerPage, int totalPages) {
+        // Execute a query to retrieve the teams for the specified page, limited by the teams per page and starting index
+        ResultSet rs = DatabaseManager.queryDB("SELECT Name, Leader, Members FROM Teams LIMIT " + teamsPerPage + " OFFSET " + startIndex);
 
         List<String> teamInfoList = new ArrayList<>();
         try {
             while (rs.next()) {
-                StringBuilder teamInfo = new StringBuilder("&a" + rs.getString("Name"));
-                UUID leaderUUID = UUID.fromString(rs.getString("Leader"));
-                Player leader = Bukkit.getPlayer(leaderUUID);
-                teamInfo.append("&7: &a").append(leader != null ? leader.getDisplayName() : "Unknown leader");
-                teamInfoList.add(teamInfo.toString());
+                // Format the team information and add it to the list
+                teamInfoList.add(formatTeamInfo(rs));
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -263,11 +281,31 @@ public class TeamsManager {
         }
 
         Map<String, Object> result = new HashMap<>();
-        result.put("isValidPage", true);
-        result.put("totalPages", totalPages);
-        result.put("teams", teamInfoList);
+        result.put("isValidPage", true); // Flag indicating the page is valid
+        result.put("totalPages", totalPages); // Total number of pages
+        result.put("teams", teamInfoList); // List of team information
 
         return result;
+    }
+
+    private static String formatTeamInfo(ResultSet rs) throws SQLException {
+        StringBuilder teamInfo = new StringBuilder("&a" + rs.getString("Name"));
+        UUID leaderUUID = UUID.fromString(rs.getString("Leader"));
+        Player leader = Bukkit.getPlayer(leaderUUID);
+
+        // Append the leader information to the team info string builder
+        teamInfo.append("&7: &a").append(leader != null ? leader.getDisplayName() : "Unknown leader");
+
+        // Retrieve the members string from the result set
+        String memberString = rs.getString("Members");
+
+        // Add member count to team info if any members exist
+        if (memberString != null && !memberString.isEmpty()) {
+            String[] members = memberString.split(",");
+            teamInfo.append("&7, and &a").append(members.length).append("&7 other members");
+        }
+
+        return teamInfo.toString();
     }
 
     private static Map<String, Object> createEmptyResult(boolean isValidPage) {
